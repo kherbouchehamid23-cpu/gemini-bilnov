@@ -1,0 +1,11 @@
+{
+  "private": true,
+  "name": "bilnov-monorepo",
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev"
+  },
+  "devDependencies": {
+    "turbo": "latest"
+  }
+}
