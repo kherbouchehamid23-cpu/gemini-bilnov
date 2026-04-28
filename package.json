@@ -1,29 +1,11 @@
 {
-{
-  "name": "web",
-  "version": "0.1.0",
   "private": true,
+  "name": "bilnov-monorepo",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start"
-  },
-  "dependencies": {
-    "next": "latest",
-    "react": "latest",
-    "react-dom": "latest",
-    "three": "latest",
-    "@react-three/fiber": "latest",
-    "@react-three/drei": "latest",
-    "lucide-react": "latest"
+    "dev": "turbo run dev",
+    "build": "turbo run build"
   },
   "devDependencies": {
-    "typescript": "latest",
-    "@types/node": "latest",
-    "@types/react": "latest",
-    "@types/react-dom": "latest",
-    "autoprefixer": "latest",
-    "postcss": "latest",
-    "tailwindcss": "latest"
+    "turbo": "latest"
   }
 }
