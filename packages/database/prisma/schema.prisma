@@ -1,0 +1,408 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_DATABASE_URL")
+}
+
+// ─── UTILISATEURS & ORGANISATIONS ───────────────────────────────────────────
+
+model User {
+  id           String     @id @default(uuid())
+  email        String     @unique
+  passwordHash String?    @map("password_hash")
+  firstName    String     @map("first_name")
+  lastName     String     @map("last_name")
+  avatarUrl    String?    @map("avatar_url")
+  status       UserStatus @default(ACTIVE)
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+  deletedAt    DateTime?  @map("deleted_at")
+
+  organization       Organization?    @relation("OrgOwner")
+  orgMemberships     OrgMember[]
+  projectsCreated    Project[]        @relation("ProjectCreator")
+  projectMemberships ProjectMember[]
+  filesUploaded      File[]
+  toursCreated       VirtualTour[]
+  accessCodesCreated AccessCode[]
+  rolesCreated       Role[]
+  refreshTokens      RefreshToken[]
+
+  @@map("users")
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  DELETED
+}
+
+model Organization {
+  id               String    @id @default(uuid())
+  name             String
+  ownerId          String    @unique @map("owner_id")
+  plan             PlanType  @default(TRIAL)
+  planExpiresAt    DateTime? @map("plan_expires_at")
+  storageUsedBytes BigInt    @default(0) @map("storage_used_bytes")
+  stripeCustomerId String?   @map("stripe_customer_id")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  owner    User        @relation("OrgOwner", fields: [ownerId], references: [id])
+  members  OrgMember[]
+  projects Project[]
+  roles    Role[]
+
+  @@map("organizations")
+}
+
+enum PlanType {
+  TRIAL
+  STARTER
+  PRO
+  ENTERPRISE
+}
+
+model OrgMember {
+  id             String       @id @default(uuid())
+  organizationId String       @map("organization_id")
+  userId         String       @map("user_id")
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  user         User         @relation(fields: [userId], references: [id])
+
+  @@unique([organizationId, userId])
+  @@map("org_members")
+}
+
+// ─── RÔLES DYNAMIQUES ───────────────────────────────────────────────────────
+
+model Role {
+  id             String   @id @default(uuid())
+  organizationId String   @map("organization_id")
+  name           String
+  description    String?
+  isSystem       Boolean  @default(false) @map("is_system")
+  createdById    String   @map("created_by_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  organization   Organization    @relation(fields: [organizationId], references: [id])
+  createdBy      User            @relation(fields: [createdById], references: [id])
+  projectMembers ProjectMember[]
+
+  @@unique([organizationId, name])
+  @@map("roles")
+}
+
+// ─── PROJETS ────────────────────────────────────────────────────────────────
+
+model Project {
+  id             String        @id @default(uuid())
+  organizationId String        @map("organization_id")
+  name           String
+  description    String?
+  structureType  StructureType @default(BUILDING) @map("structure_type")
+  sector         String?
+  coverUrl       String?       @map("cover_url")
+  status         ProjectStatus @default(ACTIVE)
+  createdById    String        @map("created_by_id")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+  deletedAt      DateTime?     @map("deleted_at")
+
+  organization Organization           @relation(fields: [organizationId], references: [id])
+  createdBy    User                   @relation("ProjectCreator", fields: [createdById], references: [id])
+  members      ProjectMember[]
+  nodes        ProjectStructureNode[]
+  files        File[]
+  tours        VirtualTour[]
+  accessCodes  AccessCode[]
+
+  @@map("projects")
+}
+
+enum StructureType {
+  BUILDING
+  FREE
+}
+
+enum ProjectStatus {
+  ACTIVE
+  ARCHIVED
+  DELETED
+}
+
+model ProjectStructureNode {
+  id        String   @id @default(uuid())
+  projectId String   @map("project_id")
+  parentId  String?  @map("parent_id")
+  name      String
+  nodeType  String   @default("custom") @map("node_type")
+  position  Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  project        Project                @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  parent         ProjectStructureNode?  @relation("NodeChildren", fields: [parentId], references: [id])
+  children       ProjectStructureNode[] @relation("NodeChildren")
+  files          File[]
+  tours          VirtualTour[]
+  memberNodes    ProjectMemberNode[]
+  shareRuleNodes ShareRuleNode[]
+
+  @@map("project_structure_nodes")
+}
+
+// ─── MEMBRES DE PROJET ──────────────────────────────────────────────────────
+
+model ProjectMember {
+  id               String   @id @default(uuid())
+  projectId        String   @map("project_id")
+  userId           String   @map("user_id")
+  roleId           String   @map("role_id")
+  canView          Boolean  @default(true) @map("can_view")
+  canUpload        Boolean  @default(false) @map("can_upload")
+  canDownload      Boolean  @default(true) @map("can_download")
+  canShare         Boolean  @default(false) @map("can_share")
+  canManageMembers Boolean  @default(false) @map("can_manage_members")
+  expiresAt        DateTime? @map("expires_at")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  project      Project             @relation(fields: [projectId], references: [id])
+  user         User                @relation(fields: [userId], references: [id])
+  role         Role                @relation(fields: [roleId], references: [id])
+  allowedNodes ProjectMemberNode[]
+
+  @@unique([projectId, userId])
+  @@map("project_members")
+}
+
+model ProjectMemberNode {
+  memberId String @map("member_id")
+  nodeId   String @map("node_id")
+
+  member ProjectMember        @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  node   ProjectStructureNode @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+
+  @@id([memberId, nodeId])
+  @@map("project_member_nodes")
+}
+
+// ─── FICHIERS (TABLE UNIQUE) ─────────────────────────────────────────────────
+
+model File {
+  id         String     @id @default(uuid())
+  projectId  String     @map("project_id")
+  nodeId     String?    @map("node_id")
+  uploaderId String     @map("uploader_id")
+  name       String
+  fileType   FileType   @map("file_type")
+  mimeType   String     @map("mime_type")
+  storageKey String     @map("storage_key")
+  sizeBytes  BigInt     @map("size_bytes")
+  status     FileStatus @default(PROCESSING)
+  metadata   Json?
+  isFavorite Boolean    @default(false) @map("is_favorite")
+  createdAt  DateTime   @default(now()) @map("created_at")
+  updatedAt  DateTime   @updatedAt @map("updated_at")
+  deletedAt  DateTime?  @map("deleted_at")
+
+  project   Project               @relation(fields: [projectId], references: [id])
+  node      ProjectStructureNode? @relation(fields: [nodeId], references: [id])
+  uploader  User                  @relation(fields: [uploaderId], references: [id])
+  tourScene TourScene?
+
+  @@map("files")
+}
+
+enum FileType {
+  IMAGE
+  IMAGE_360
+  PDF
+  DWG
+  DXF
+  OBJ
+  GLB
+  GLTF
+  IFC
+  VIDEO
+  OTHER
+}
+
+enum FileStatus {
+  PROCESSING
+  ACTIVE
+  DELETED
+}
+
+// ─── VISITES 360° ────────────────────────────────────────────────────────────
+
+model VirtualTour {
+  id          String     @id @default(uuid())
+  projectId   String     @map("project_id")
+  nodeId      String?    @map("node_id")
+  name        String
+  status      TourStatus @default(DRAFT)
+  publishedAt DateTime?  @map("published_at")
+  createdById String     @map("created_by_id")
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+
+  project   Project               @relation(fields: [projectId], references: [id])
+  node      ProjectStructureNode? @relation(fields: [nodeId], references: [id])
+  createdBy User                  @relation(fields: [createdById], references: [id])
+  scenes    TourScene[]
+
+  @@map("virtual_tours")
+}
+
+enum TourStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+model TourScene {
+  id        String   @id @default(uuid())
+  tourId    String   @map("tour_id")
+  fileId    String   @unique @map("file_id")
+  name      String
+  position  Int      @default(0)
+  isInitial Boolean  @default(false) @map("is_initial")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tour      VirtualTour   @relation(fields: [tourId], references: [id], onDelete: Cascade)
+  file      File          @relation(fields: [fileId], references: [id])
+  hotspots  TourHotspot[]
+  incomingLinks TourHotspot[] @relation("HotspotTarget")
+
+  @@map("tour_scenes")
+}
+
+model TourHotspot {
+  id            String      @id @default(uuid())
+  sceneId       String      @map("scene_id")
+  type          HotspotType
+  positionYaw   Float       @map("position_yaw")
+  positionPitch Float       @map("position_pitch")
+  targetSceneId String?     @map("target_scene_id")
+  content       Json
+  createdAt     DateTime    @default(now()) @map("created_at")
+
+  scene       TourScene  @relation(fields: [sceneId], references: [id], onDelete: Cascade)
+  targetScene TourScene? @relation("HotspotTarget", fields: [targetSceneId], references: [id])
+
+  @@map("tour_hotspots")
+}
+
+enum HotspotType {
+  LINK
+  TEXT
+  IMAGE
+  VIDEO
+}
+
+// ─── PARTAGE ─────────────────────────────────────────────────────────────────
+
+model AccessCode {
+  id          String    @id @default(uuid())
+  projectId   String    @map("project_id")
+  code        String    @unique
+  displayCode String    @map("display_code")
+  createdById String    @map("created_by_id")
+  expiresAt   DateTime? @map("expires_at")
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  project    Project     @relation(fields: [projectId], references: [id])
+  createdBy  User        @relation(fields: [createdById], references: [id])
+  shareRules ShareRule[]
+  accessLogs AccessLog[]
+
+  @@map("access_codes")
+}
+
+model ShareRule {
+  id               String     @id @default(uuid())
+  accessCodeId     String     @map("access_code_id")
+  canView          Boolean    @default(true) @map("can_view")
+  canDownload      Boolean    @default(false) @map("can_download")
+  canUpload        Boolean    @default(false) @map("can_upload")
+  canShare         Boolean    @default(false) @map("can_share")
+  allowedFileTypes FileType[] @map("allowed_file_types")
+  createdAt        DateTime   @default(now()) @map("created_at")
+
+  accessCode   AccessCode      @relation(fields: [accessCodeId], references: [id], onDelete: Cascade)
+  allowedNodes ShareRuleNode[]
+
+  @@map("share_rules")
+}
+
+model ShareRuleNode {
+  shareRuleId String @map("share_rule_id")
+  nodeId      String @map("node_id")
+
+  shareRule ShareRule            @relation(fields: [shareRuleId], references: [id], onDelete: Cascade)
+  node      ProjectStructureNode @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+
+  @@id([shareRuleId, nodeId])
+  @@map("share_rule_nodes")
+}
+
+model AccessLog {
+  id           String   @id @default(uuid())
+  accessCodeId String   @map("access_code_id")
+  ipAddress    String?  @map("ip_address")
+  userAgent    String?  @map("user_agent")
+  accessedAt   DateTime @default(now()) @map("accessed_at")
+
+  accessCode AccessCode @relation(fields: [accessCodeId], references: [id])
+
+  @@map("access_logs")
+}
+
+// ─── AUTHENTIFICATION ────────────────────────────────────────────────────────
+
+model RefreshToken {
+  id        String    @id @default(uuid())
+  userId    String    @map("user_id")
+  tokenHash String    @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  revokedAt DateTime? @map("revoked_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+}
+
+// ─── ABONNEMENTS ─────────────────────────────────────────────────────────────
+
+model Subscription {
+  id                   String             @id @default(uuid())
+  organizationId       String             @unique @map("organization_id")
+  stripeSubscriptionId String?            @unique @map("stripe_subscription_id")
+  plan                 PlanType
+  status               SubscriptionStatus
+  currentPeriodStart   DateTime           @map("current_period_start")
+  currentPeriodEnd     DateTime           @map("current_period_end")
+  cancelAtPeriodEnd    Boolean            @default(false) @map("cancel_at_period_end")
+  createdAt            DateTime           @default(now()) @map("created_at")
+  updatedAt            DateTime           @updatedAt @map("updated_at")
+
+  @@map("subscriptions")
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  UNPAID
+}

@@ -1,0 +1,36 @@
+node_modules/
+.next/
+dist/
+build/
+.turbo/
+.vercel/
+
+# Env files
+.env
+.env.local
+.env.production
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Test
+coverage/
+.nyc_output/
+
+# Prisma
+prisma/migrations/dev/
+
+# Upload temp
+uploads/tmp/
