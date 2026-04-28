@@ -1,7 +1,7 @@
 {
   "version": 2,
-  "installCommand": "npm install -g pnpm@9.15.0 && pnpm install --no-frozen-lockfile",
-  "buildCommand": "pnpm --filter @bilnov/web build",
+  "installCommand": "npm install",
+  "buildCommand": "npm run build --workspace=apps/web",
   "outputDirectory": "apps/web/.next",
   "framework": "nextjs"
 }
